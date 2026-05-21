@@ -23,3 +23,11 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local AI session notes (not for submission)
+AI_USAGE_NOTES.md
+
+# Office temp/lock files
+~$*.docx
+~$*.xlsx
+~$*.pptx

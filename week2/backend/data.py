@@ -552,6 +552,17 @@ def forecast_demand(
     # Get zone metadata
     zone_info = _zone_map.get(zone_id, {})
 
+    # Pre-compute zone-constant metadata ONCE (perf: was inside the 672-iteration loop below)
+    zone_data = _full_demand[_full_demand["PULocationID"] == zone_id]
+    if zone_data.empty:
+        return []
+
+    last_borough_id = int(zone_data["borough_id"].iloc[0])
+    last_service_zone_id = int(zone_data["service_zone_id"].iloc[0])
+    is_airport = int(zone_data["is_airport_zone"].iloc[0])
+    zone_slot_baseline = float(zone_data["zone_slot_baseline"].iloc[0])
+    is_holiday = 0
+
     # Get synthetic current demand to use as baseline for lags
     synthetic_current = _generate_synthetic_current_demand(hour, dow)
     current_synthetic_demand = synthetic_current.get(zone_id, 0.0)
@@ -575,58 +586,14 @@ def forecast_demand(
                     {
                         "time_bucket": past_time,
                         "trip_count": past_demand,
-                        "borough_id": (
-                            int(
-                                _full_demand[_full_demand["PULocationID"] == zone_id][
-                                    "borough_id"
-                                ].iloc[0]
-                            )
-                            if len(
-                                _full_demand[_full_demand["PULocationID"] == zone_id]
-                            )
-                            > 0
-                            else 0
-                        ),
-                        "service_zone_id": (
-                            int(
-                                _full_demand[_full_demand["PULocationID"] == zone_id][
-                                    "service_zone_id"
-                                ].iloc[0]
-                            )
-                            if len(
-                                _full_demand[_full_demand["PULocationID"] == zone_id]
-                            )
-                            > 0
-                            else 0
-                        ),
-                        "is_airport_zone": 1 if zone_id in AIRPORT_ZONES else 0,
-                        "zone_slot_baseline": (
-                            float(
-                                _full_demand[_full_demand["PULocationID"] == zone_id][
-                                    "zone_slot_baseline"
-                                ].iloc[0]
-                            )
-                            if len(
-                                _full_demand[_full_demand["PULocationID"] == zone_id]
-                            )
-                            > 0
-                            else 0.0
-                        ),
+                        "borough_id": last_borough_id,
+                        "service_zone_id": last_service_zone_id,
+                        "is_airport_zone": is_airport,
+                        "zone_slot_baseline": zone_slot_baseline,
                     }
                 )
 
     synthetic_history_df = pd.DataFrame(synthetic_history)
-
-    # Get zone metadata from actual data
-    zone_data = _full_demand[_full_demand["PULocationID"] == zone_id]
-    if zone_data.empty:
-        return []
-
-    last_borough_id = int(zone_data["borough_id"].iloc[0])
-    last_service_zone_id = int(zone_data["service_zone_id"].iloc[0])
-    is_airport = int(zone_data["is_airport_zone"].iloc[0])
-    zone_slot_baseline = float(zone_data["zone_slot_baseline"].iloc[0])
-    is_holiday = 0
     cbd_pricing_active = 0
 
     # Add current synthetic demand to history
