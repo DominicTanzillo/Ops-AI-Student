@@ -31,6 +31,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
+      with:
+        lfs: true
 
     # Authenticate to GCP using service account key (from GitHub Secret)
     - name: Authenticate to Google Cloud
