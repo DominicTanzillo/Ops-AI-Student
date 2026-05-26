@@ -11,6 +11,17 @@ import json
 import requests
 from functools import lru_cache
 
+# Week 3 graceful-degradation hook: validate + clean the loaded data.
+# The validation/ package lives one level up; add it to sys.path so this
+# module can be loaded both from `python data.py` and from `uvicorn main:app`.
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+try:
+    from validation.clean_data import clean_dataframe, DataLoadTooBadError  # noqa: E402
+except ImportError:
+    clean_dataframe = None  # validation module unavailable; load without cleanup
+    DataLoadTooBadError = Exception  # type: ignore
+
 _ROOT = Path(__file__).parent.parent.parent
 DATA_PATH   = _ROOT / "data" / "processed" / "demand_enriched.parquet"
 LOOKUP_PATH = _ROOT / "Meta Data" / "Lookups" / "taxi_zone_lookup.csv"
@@ -77,9 +88,16 @@ def _load():
         DATA_PATH,
         columns=["PULocationID", "hour", "dayofweek", "trip_count", "is_holiday", "time_bucket"],
     )
-    
-    # Identify specific holidays
+
+    # Week 3 graceful degradation: detect + auto-fix critical data quality issues
     df['time_bucket'] = pd.to_datetime(df['time_bucket'])
+    if clean_dataframe is not None:
+        df, _cln_report = clean_dataframe(df)
+        if _cln_report.get("fixes_applied"):
+            print(f"[NYC Cab Analytics] data_quality startup_fixes={_cln_report['fixes_applied']} "
+                  f"drop_rate={_cln_report['drop_rate']:.4%}")
+
+    # Identify specific holidays
     df['holiday_name'] = df.apply(
         lambda row: _identify_holiday(row['time_bucket']) if row['is_holiday'] == 1 else "regular",
         axis=1
@@ -135,6 +153,11 @@ def _load_full_demand():
     print("[NYC Cab Analytics] Loading full demand data for forecasting...")
     df = pd.read_parquet(DATA_PATH)
     df['time_bucket'] = pd.to_datetime(df['time_bucket'])
+    if clean_dataframe is not None:
+        df, _cln_report = clean_dataframe(df)
+        if _cln_report.get("fixes_applied"):
+            print(f"[NYC Cab Analytics] full_demand data_quality_fixes={_cln_report['fixes_applied']} "
+                  f"drop_rate={_cln_report['drop_rate']:.4%}")
     return df
 
 
