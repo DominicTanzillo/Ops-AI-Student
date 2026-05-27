@@ -50,7 +50,11 @@ logger = logging.getLogger(__name__)
 
 # Tunables - kept here as module constants so they're easy to find / change
 TRIP_COUNT_SENTINELS = {-5, -1, 9999, 99999}
-TRIP_COUNT_MAX_HISTORICAL = 310  # from baseline drill-down
+# Historical maximum from 3 years of pre-Jan 16, 2026 data is 310.
+# We allow 1.5x headroom (465) so unprecedented-but-plausible spike events
+# (e.g., New Year's Eve at JFK) do not trip the gate as false positives.
+# The sentinels above (9999, 99999) are still caught by exact-value matching.
+TRIP_COUNT_MAX_HISTORICAL = 465  # 1.5x observed historical max of 310
 TRIP_COUNT_NEGATIVE_FLOOR = 0    # trip counts cannot be negative
 
 
