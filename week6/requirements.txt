@@ -1,3 +1,8 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:0daba1f5c6f6c773575d470826df57e327a11ef2b0593a2367d330b75b91bf4a
-size 143
+google-genai>=0.8.0
+google-cloud-firestore>=2.14.0
+sqlite3
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic>=2.0.0
+pytest>=7.0.0
+python-dotenv>=1.0.0

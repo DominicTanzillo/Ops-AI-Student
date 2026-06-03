@@ -1,0 +1,17 @@
+{
+  "_comment": "12 diverse test queries spanning the 4 categories the agent should handle. Used by evaluate_agent.py to demonstrate caching + model routing + cost breakdown.",
+  "test_queries": [
+    {"question": "What is the travel policy?", "role": "engineer", "category": "policy"},
+    {"question": "What is the travel policy?", "role": "engineer", "category": "policy_repeat"},
+    {"question": "Who can approve expenses over $5000?", "role": "manager", "category": "approval"},
+    {"question": "What is the meal per diem for breakfast?", "role": "finance", "category": "lookup"},
+    {"question": "What is the compensation policy?", "role": "hr", "category": "policy"},
+    {"question": "Compare HR benefits vs engineering benefits", "role": "manager", "category": "complex"},
+    {"question": "Why does the expense submission deadline matter?", "role": "engineer", "category": "complex"},
+    {"question": "Find employee Smith", "role": "manager", "category": "lookup"},
+    {"question": "What is the PTO default?", "role": "engineer", "category": "lookup"},
+    {"question": "Show me the receipt threshold", "role": "finance", "category": "lookup"},
+    {"question": "Analyze the approval-level structure step by step", "role": "executive", "category": "complex"},
+    {"question": "What is the receipt required threshold?", "role": "finance", "category": "lookup_paraphrase"}
+  ]
+}
