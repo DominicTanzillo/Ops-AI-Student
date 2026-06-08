@@ -40,13 +40,25 @@ from typing import Any, Dict, List, Optional
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
+# Optional: auto-load week5/.env if python-dotenv is installed. Falls back
+# silently to plain os.getenv if the package isn't available.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 
-# Gemini 2.5 Pro pricing per the Week 5 README. Kept as module constants so the
-# Agent class and the cost helper agree.
-GEMINI_INPUT_RATE_PER_1M = 0.075
-GEMINI_OUTPUT_RATE_PER_1M = 0.30
-GEMINI_MODEL = "gemini-2.5-pro"
+# Model + pricing. README specifies gemini-2.5-pro, but Google has set the
+# Pro free-tier daily quota to 0 on standard AI Studio keys (Oct 2025
+# pricing-tier change). The agent architecture is identical regardless of
+# which Gemini variant answers, so we use gemini-2.5-flash (free tier active)
+# for the live demo. Pricing constants reflect the current Flash paid-tier
+# rate; actual billed cost on free tier is $0.
+GEMINI_INPUT_RATE_PER_1M = 0.30
+GEMINI_OUTPUT_RATE_PER_1M = 2.50
+GEMINI_MODEL = "gemini-2.5-flash"
 
 
 # ============================================================================
@@ -81,7 +93,10 @@ class EmployeeLookupTool(Tool):
         self.db_path = db_path
 
     def execute(self, employee_name: Optional[str] = None,
-                employee_id: Optional[str] = None) -> str:
+                employee_id: Optional[str] = None, **aliases) -> str:
+        # Accept common synonyms the LLM may emit (name=, id=).
+        employee_name = employee_name or aliases.get("name")
+        employee_id = employee_id or aliases.get("id")
         try:
             if not os.path.exists(self.db_path):
                 return f"Error: database not found at {self.db_path}"
@@ -297,13 +312,24 @@ class Agent:
             f"- {t.name}: {t.description}" for t in self.tools.values()
         )
         return (
-            "You are a TechCorp assistant. Answer employee questions using "
-            "the tools below.\n"
+            "You are a TechCorp assistant. ALWAYS answer by calling exactly "
+            "one tool first. DO NOT answer from memory or training data — "
+            "the tools are the only source of truth for TechCorp policies, "
+            "employees, and expense rules.\n\n"
             f"User role: {user_role}\n\n"
             f"Available tools:\n{tool_lines}\n\n"
-            "To use a tool, respond with:\n"
+            "Routing guidance:\n"
+            "- Questions about policies (travel, PTO, expenses, compensation,"
+            " benefits, remote work): use policy_search with one or two "
+            "keywords from the question (e.g. query=travel, query=PTO).\n"
+            "- Questions about a specific person (name or ID): use "
+            "employee_lookup with employee_name=<name> or employee_id=<id>.\n"
+            "- Questions about approval limits per role (ic1_ic2, ic3, "
+            "manager, director, vp): use expense_query with role=<role>.\n\n"
+            "Respond on the FIRST turn with ONLY:\n"
             "TOOL: <tool_name>\n"
-            "ARGS: <argument>=<value>"
+            "ARGS: <argument>=<value>\n\n"
+            "Do not add any other text on the first turn."
         )
 
     def _parse_tool_call(self, text: str) -> Optional[Dict[str, Any]]:
@@ -363,10 +389,15 @@ class Agent:
                 tool_result = f"Tool error: {e}"
 
             followup = self._call_llm(
-                sys_prompt,
+                "You are a TechCorp assistant writing the FINAL answer. The "
+                "TOOL OUTPUT below is the AUTHORITATIVE source — summarize "
+                "or quote from it. Do NOT say 'I couldn't find...' unless "
+                "the tool output literally says 'not found' or 'No matching"
+                " documents'. Do NOT emit TOOL:/ARGS: lines. Write 1-3 "
+                "sentences in plain English citing the tool result.",
                 f"User question: {user_query}\n\n"
                 f"Tool {tool_call['name']} returned:\n{tool_result}\n\n"
-                "Write a clear final answer.",
+                "Final answer:",
             )
             total_in += followup.usage_metadata.prompt_token_count
             total_out += followup.usage_metadata.candidates_token_count

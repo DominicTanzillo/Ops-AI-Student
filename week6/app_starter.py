@@ -34,11 +34,20 @@ from access_control_starter import AccessController, CostEnforcer, RateLimiter
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "")
 
-GEMINI_INPUT_RATE_PER_1M = 0.075
-GEMINI_OUTPUT_RATE_PER_1M = 0.30
-GEMINI_MODEL = "gemini-2.5-pro"
+# See note in week5/app_starter.py: switched from gemini-2.5-pro to
+# gemini-2.5-flash because Pro has limit=0 on AI Studio free tier as of the
+# Oct 2025 pricing change. Agent architecture is unchanged.
+GEMINI_INPUT_RATE_PER_1M = 0.30
+GEMINI_OUTPUT_RATE_PER_1M = 2.50
+GEMINI_MODEL = "gemini-2.5-flash"
 
 
 # ============================================================================
@@ -64,7 +73,9 @@ class EmployeeLookupTool(Tool):
         self.db_path = db_path
 
     def execute(self, employee_name: Optional[str] = None,
-                employee_id: Optional[str] = None) -> str:
+                employee_id: Optional[str] = None, **aliases) -> str:
+        employee_name = employee_name or aliases.get("name")
+        employee_id = employee_id or aliases.get("id")
         try:
             if not os.path.exists(self.db_path):
                 return f"Error: database not found at {self.db_path}"
@@ -260,11 +271,18 @@ class Agent:
             f"- {t.name}: {t.description}" for t in self.tools.values()
         )
         return (
-            "You are a TechCorp assistant. Answer employee questions using "
-            "the tools below.\n"
+            "You are a TechCorp assistant. ALWAYS answer by calling exactly "
+            "one tool first. DO NOT answer from memory or training data.\n\n"
             f"User role: {user_role}\n\n"
             f"Available tools:\n{tool_lines}\n\n"
-            "To use a tool, respond with:\n"
+            "Routing guidance:\n"
+            "- Policy questions (travel, PTO, expenses, compensation, "
+            "benefits, remote work): use policy_search with 1-2 keywords.\n"
+            "- Specific-person questions: use employee_lookup with "
+            "employee_name=<name> or employee_id=<id>.\n"
+            "- Approval-limit questions per role: use expense_query with "
+            "role=<role>.\n\n"
+            "Respond on the FIRST turn with ONLY:\n"
             "TOOL: <tool_name>\n"
             "ARGS: <argument>=<value>"
         )
@@ -339,10 +357,14 @@ class Agent:
                 tool_result = f"Tool error: {e}"
 
             followup = self._call_llm(
-                sys_prompt,
+                "You are a TechCorp assistant writing the FINAL answer. The "
+                "TOOL OUTPUT below is AUTHORITATIVE — summarize or quote "
+                "from it. Do NOT say 'couldn't find' unless the tool output "
+                "literally says so. Do NOT emit TOOL:/ARGS: lines. Write "
+                "1-3 sentences in plain English citing the tool result.",
                 f"User question: {user_query}\n\n"
                 f"Tool {tool_call['name']} returned:\n{tool_result}\n\n"
-                "Write a clear final answer.",
+                "Final answer:",
             )
             total_in += followup.usage_metadata.prompt_token_count
             total_out += followup.usage_metadata.candidates_token_count
