@@ -38,6 +38,12 @@ REPO = Path(__file__).resolve().parents[2]
 WEEK7 = REPO / "week7"
 sys.path.insert(0, str(WEEK7))
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv(WEEK7 / ".env")
+except ImportError:
+    pass
+
 from app.access_control import AccessController, CostEnforcer, RateLimiter
 from app.agent import Agent, FunctionCall, LLMResponse
 from app.cost_optimization import (

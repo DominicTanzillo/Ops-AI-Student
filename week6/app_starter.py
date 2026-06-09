@@ -115,11 +115,19 @@ class PolicySearchTool(Tool):
             with open(self.DOCS_PATH, "r", encoding="utf-8") as f:
                 self.documents = json.load(f)
 
-    def execute(self, query: str, limit: int = 5) -> str:
+    def execute(self, query: str = "", limit: int = 5, **aliases) -> str:
         try:
+            # Accept synonyms the LLM emits (keywords=, keyword=, q=, term=).
+            for alt in ("keywords", "keyword", "q", "term", "topic"):
+                if not query and alt in aliases:
+                    query = aliases[alt]
             q = (query or "").lower().strip()
             if not q:
                 return "Error: empty query"
+            try:
+                limit = int(limit)
+            except (TypeError, ValueError):
+                limit = 5
             matches: List[Dict[str, Any]] = []
             for doc in self.documents:
                 hay = (doc.get("content", "") + " " + doc.get("title", "")).lower()
@@ -152,8 +160,12 @@ class ExpenseQueryTool(Tool):
             with open(self.POLICIES_PATH, "r", encoding="utf-8") as f:
                 self.policies = json.load(f)
 
-    def execute(self, role: str) -> str:
+    def execute(self, role: str = "", **aliases) -> str:
         try:
+            for alt in ("user_role", "level", "rank"):
+                if not role and alt in aliases:
+                    role = aliases[alt]
+            role = (role or "").strip().lower()
             limits = self.policies.get("expense", {}).get("approval_limits", {})
             if role in limits:
                 return f"Approval limit for {role}: ${limits[role]}"

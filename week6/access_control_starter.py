@@ -72,13 +72,17 @@ class AccessController:
         for field, entry in sensitive.items():
             if role in entry.get("visibility", []):
                 continue
-            # Match "salary: $100,000", "salary = 100000", "ssn 123-45-6789".
-            # \S+ captures the whole value token (handles dashes, commas, $).
+            # Match "salary: $100,000", "salary is $467,621", "ssn 123-45-6789".
+            # After the field name, optionally consume a small connector word
+            # (is/was/of/=/:) plus whitespace, then redact everything up to
+            # the end of the value group (digits, commas, $, dashes, periods).
             pattern = re.compile(
-                rf"({re.escape(field)}\s*[:=]?\s+)\S+",
+                rf"({re.escape(field)})"
+                rf"(?:\s*(?:is|was|of|=|:|are|equals)?\s*)"
+                rf"(\$?[\d][\d,\.\-x]*|\S+)",
                 re.IGNORECASE,
             )
-            out = pattern.sub(r"\1[REDACTED]", out)
+            out = pattern.sub(r"\1: [REDACTED]", out)
         return out
 
     # --- audit ------------------------------------------------------------

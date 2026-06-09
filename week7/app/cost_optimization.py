@@ -279,7 +279,11 @@ class OptimizationStrategy:
     def select_model_by_complexity(self, query: str) -> str:
         q = (query or "").lower()
         is_complex = any(kw in q for kw in COMPLEX_KEYWORDS)
-        choice = "gemini-2.5-pro" if is_complex else "gemini-1.5-flash"
+        # Pro free tier was deprecated by Google (Oct 2025). For this run we
+        # use Flash as the "expensive" tier and Flash-Lite as the cheap tier.
+        # The architecture (cheap path for simple queries, capable path for
+        # complex ones) is unchanged.
+        choice = "gemini-2.5-flash" if is_complex else "gemini-2.5-flash-lite"
         self._model_choices["pro" if is_complex else "flash"] += 1
         return choice
 
