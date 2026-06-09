@@ -42,23 +42,37 @@ QUERIES = [
 ]
 
 
-def _run_with_retry(agent: Agent, query: str, retries: int = 2) -> dict:
-    last_err = None
+def _run_with_retry(agent: Agent, query: str, retries: int = 1) -> dict:
+    """Conservative retry to protect against burning quota / credits.
+
+    - Daily-cap 429s: do NOT retry. Sleeping doesn't help; we'd just keep
+      bouncing off the same wall and double-bill on a paid tier.
+    - Per-minute 429s: retry once after 45s.
+    - Transient 5xx: retry once after 5s.
+    - Anything else: fail fast.
+    """
+    last_err: Exception | None = None
     for attempt in range(retries + 1):
         try:
             return agent.query(query)
         except Exception as e:
             msg = str(e)
             last_err = e
+            if "PerDay" in msg or "RequestsPerDay" in msg:
+                raise  # daily cap hit; retry won't help
             if "429" in msg or "RESOURCE_EXHAUSTED" in msg:
-                # Rate-limited: wait for the per-minute window to clear.
-                time.sleep(45)
-                continue
+                if attempt < retries:
+                    time.sleep(45)
+                    continue
+                raise
             if "503" in msg or "UNAVAILABLE" in msg or "500" in msg:
-                time.sleep(5)
-                continue
+                if attempt < retries:
+                    time.sleep(5)
+                    continue
+                raise
             raise
-    raise last_err  # type: ignore[misc]
+    assert last_err is not None
+    raise last_err
 
 
 def main() -> int:
@@ -90,9 +104,9 @@ def main() -> int:
             "tokens_used": r.get("tokens_used"),
             "cost": r.get("cost"),
         })
-        # Flash free tier is 5 RPM and we use 2 calls per query (tool-pick +
-        # synthesize), so we need >= ~24 s between query starts.
-        time.sleep(25)
+        # Paid-tier Flash has very high RPM; a short pause keeps the
+        # transcript readable without burning wall-clock time.
+        time.sleep(3)
 
     print("\n" + "=" * 70)
     metrics = agent.get_metrics()
